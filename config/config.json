@@ -1,0 +1,34 @@
+{
+  "window": {
+    "width": 1400,
+    "height": 800,
+    "fps": 120,
+    "title": "Fourier Series Visualization"
+  },
+  "visualization": {
+    "epicycle_scale": 80,
+    "trace_length": 500,
+    "animation_speed": 0.02,
+    "grid_enabled": true
+  },
+  "fourier": {
+    "min_terms": 1,
+    "max_terms": 100,
+    "default_terms": 10
+  },
+  "colors": {
+    "background": [20, 20, 30],
+    "grid": [50, 50, 70],
+    "epicycle": [100, 200, 255],
+    "trace": [255, 100, 150],
+    "function": [100, 255, 100],
+    "text": [255, 255, 255],
+    "ui_bg": [30, 30, 50],
+    "ui_border": [100, 100, 150]
+  },
+  "fonts": {
+    "title_size": 24,
+    "label_size": 16,
+    "value_size": 14
+  }
+}
