@@ -3,6 +3,8 @@ import math
 import random
 import json
 import os
+from typing import List, Tuple
+from fourier_math import FourierSeries, Epicycle
 
 class Button:
     def __init__(self, x, y, width, height, label=""):
@@ -52,7 +54,7 @@ class Slider:
         if not pressed:
             self.dragging = False
         if self.dragging:
-            rel = max(0, min(pos[0]-self.x, self.width))
+            rel = max(0, min(pos[0] - self.x, self.width))
             val = self.min_val + (rel / self.width) * (self.max_val - self.min_val)
             self.value = round(val)
 
@@ -64,15 +66,15 @@ class FourierSeries:
 
     def calculate_rectangular(self, num_terms):
         self.epicycles = []
-        for n in range(1, num_terms+1):
-            harmonic = 2*n - 1
+        for n in range(1, num_terms + 1):
+            harmonic = 2 * n - 1
             amplitude = (4.0 / math.pi) * (1.0 / harmonic)
             self.epicycles.append({"frequency": harmonic, "amplitude": amplitude, "phase": 0.0, "angle": 0.0})
 
     def calculate_sawtooth(self, num_terms):
         self.epicycles = []
-        for n in range(1, num_terms+1):
-            sign = 1 if (n%2 == 1) else -1
+        for n in range(1, num_terms + 1):
+            sign = 1 if (n % 2 == 1) else -1
             amplitude = abs((2.0 / math.pi) * sign * (1.0 / n))
             phase = 0.0 if sign > 0 else math.pi
             self.epicycles.append({"frequency": n, "amplitude": amplitude, "phase": phase, "angle": 0.0})
@@ -99,7 +101,7 @@ class FourierSeries:
 class FourierVisualizer:
     def __init__(self, config_path="config/config.json"):
         if not os.path.exists(config_path):
-            raise RuntimeError("config.json not found!")
+            raise RuntimeError("config.json не найден!")
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = json.load(f)
 
@@ -111,7 +113,6 @@ class FourierVisualizer:
         self.running = True
         self.paused = False
         self.time = 0
-        self.trace_points = []
         self.function_type = "rectangular"
         self.fourier = FourierSeries(self.function_type)
         self.fourier.calculate_rectangular(self.config['fourier']['default_terms'])
@@ -131,12 +132,18 @@ class FourierVisualizer:
         self.btn_pause = Button(760, win_cfg['height'] - 150, 100, 48, "Pause")
         self.btn_reset = Button(880, win_cfg['height'] - 150, 110, 48, "Reset")
 
+        # Для графика
+        self.trace_points = []
+
     def _switch_function(self, func):
         self.function_type = func
         if func == "rectangular":
             self.fourier.calculate_rectangular(int(self.slider_terms.value))
         elif func == "sawtooth":
             self.fourier.calculate_sawtooth(int(self.slider_terms.value))
+        # сбрасываем trace при смене функции
+        self.trace_points = []
+        self.time = 0
 
     def _reset_animation(self):
         self.time = 0
@@ -182,17 +189,30 @@ class FourierVisualizer:
         if not self.paused:
             self.time += self.slider_speed.value * 0.001
             self.fourier.update(self.time)
+            cycles_center_x = self.config['window']['width'] // 3
+            cycles_center_y = self.config['window']['height'] // 2
             final_point = self.fourier.get_final_point(
-                self.config['window']['width'] // 3, self.config['window']['height'] // 2,
-                self.config['visualization']['epicycle_scale'])
-            if len(self.trace_points) < self.config['visualization']['trace_length']:
-                self.trace_points.append(final_point)
+                cycles_center_x,
+                cycles_center_y,
+                self.config['visualization']['epicycle_scale']
+            )
+            # trace ближе к кругу!
+            OFFSET = 100  # настройте это число для нужного положения графика
+            trace_origin_x = cycles_center_x + OFFSET
+            trace_origin_y = cycles_center_y
+            trace_length = self.config['visualization']['trace_length']
+            graph_step = 2
+            x = trace_origin_x + len(self.trace_points) * graph_step
+            y = final_point[1]
+            if len(self.trace_points) < trace_length:
+                self.trace_points.append((x, y))
             else:
                 self.trace_points.pop(0)
-                self.trace_points.append(final_point)
+                self.trace_points.append((x, y))
             if self.time >= 2 * math.pi:
                 self.time = 0
                 self.trace_points = []
+
 
     def _draw_grid(self):
         grid_color = (40,40,60)
@@ -202,10 +222,13 @@ class FourierVisualizer:
             pygame.draw.line(self.screen, grid_color, (0,y), (self.config['window']['width'], y), 1)
 
     def _draw_epicycles(self):
+        cycles_center_x = self.config['window']['width'] // 3
+        cycles_center_y = self.config['window']['height'] // 2
         pts = self.fourier.get_epicycle_points(
-            self.config['window']['width'] // 3,
-            self.config['window']['height'] // 2,
-            self.config['visualization']['epicycle_scale'])
+            cycles_center_x,
+            cycles_center_y,
+            self.config['visualization']['epicycle_scale']
+        )
         color = tuple(self.config['colors']['epicycle'])
         for i in range(len(pts)-1):
             x1, y1 = pts[i]
@@ -215,10 +238,23 @@ class FourierVisualizer:
             pygame.draw.line(self.screen, color, (int(x1), int(y1)), (int(x2), int(y2)), 2)
 
     def _draw_trace(self):
+        # именно график справа
         trace_color = tuple(self.config['colors']['trace'])
         if len(self.trace_points) > 1:
             for i in range(len(self.trace_points)-1):
                 pygame.draw.line(self.screen, trace_color, self.trace_points[i], self.trace_points[i+1], 2)
+
+        # соединяем последнюю точку графика и точку эпициклов линией
+        cycles_center_x = self.config['window']['width'] // 3
+        cycles_center_y = self.config['window']['height'] // 2
+        final_point = self.fourier.get_final_point(
+            cycles_center_x,
+            cycles_center_y,
+            self.config['visualization']['epicycle_scale']
+        )
+        if self.trace_points:
+            last_trace_x, last_trace_y = self.trace_points[-1]
+            pygame.draw.line(self.screen, (255,0,0), (final_point[0], final_point[1]), (last_trace_x, last_trace_y), 1)
 
     def _draw_ui(self):
         text_color = tuple(self.config['colors']['text'])
@@ -283,5 +319,9 @@ class FourierVisualizer:
             self.clock.tick(self.config['window'].get('fps', 60))  # 60 FPS или из json
         pygame.quit()
 
+def main():
+    app = FourierVisualizer()
+    app.run()
+
 if __name__ == "__main__":
-    FourierVisualizer().run()
+    main()
